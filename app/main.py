@@ -1,9 +1,70 @@
 import flet as ft
 import sqlite3
+import os
+
+def get_db_path():
+    db_name = 'inventory.db'
+
+    paths = [
+        os.environ.get("HOME"),
+        os.path.dirname(os.path.abspath(__file__)),
+        os.getcwd()
+    ]
+
+    for p in paths:
+        if p:
+            try:
+                test_file = os.path.join(p, "test.tmp")
+                with open(test_file, 'w') as f:
+                    f.write("1")
+                os.remove(test_file)
+                return os.path.join(p, db_name)
+            except Exception:
+                continue
+
+    return db_name
+
+
+DB_PATH = get_db_path()
+
+
+def initialize_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='shirts'")
+    table_exists = cursor.fetchone()
+
+    if not table_exists:
+        cursor.execute('''
+                       CREATE TABLE shirts
+                       (
+                           id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                           color       TEXT,
+                           size        TEXT,
+                           initial_qty INTEGER,
+                           sold_qty    INTEGER
+                       )
+                       ''')
+
+        thanasis_data = [
+            ("ΜΠΟΡΝΤΟ", "2XL", 2, 1), ("ΜΠΟΡΝΤΟ", "XL", 3, 3), ("ΜΠΟΡΝΤΟ", "L", 3, 1),
+            ("ΜΠΟΡΝΤΟ", "M", 3, 3), ("ΜΠΟΡΝΤΟ", "S", 1, 1),
+            ("ΜΠΕΖ", "XL", 2, 0), ("ΜΠΕΖ", "L", 2, 0), ("ΜΠΕΖ", "M", 2, 1), ("ΜΠΕΖ", "S", 1, 0),
+            ("ΛΕΥΚΑ", "XL", 3, 2), ("ΛΕΥΚΑ", "L", 3, 0), ("ΛΕΥΚΑ", "M", 3, 1),
+            ("ΛΕΥΚΑ", "S", 3, 0), ("ΛΕΥΚΑ", "9-10", 3, 0),
+            ("ΜΑΥΡΑ", "2XL", 3, 0), ("ΜΑΥΡΑ", "XL", 7, 3), ("ΜΑΥΡΑ", "L", 3, 1),
+            ("ΜΑΥΡΑ", "M", 3, 2), ("ΜΑΥΡΑ", "S", 3, 2), ("ΜΑΥΡΑ", "9-10", 3, 0), ("ΜΑΥΡΑ", "3XL", 2, 1)
+        ]
+
+        cursor.executemany('INSERT INTO shirts (color, size, initial_qty, sold_qty) VALUES (?, ?, ?, ?)', thanasis_data)
+        conn.commit()
+
+    conn.close()
 
 
 def get_inventory():
-    conn = sqlite3.connect('inventory.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT id, color, size, initial_qty, sold_qty FROM shirts ORDER BY color, size")
     rows = cursor.fetchall()
@@ -12,7 +73,7 @@ def get_inventory():
 
 
 def update_sold_quantity(item_id, new_sold_qty):
-    conn = sqlite3.connect('inventory.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("UPDATE shirts SET sold_qty = ? WHERE id = ?", (new_sold_qty, item_id))
     conn.commit()
@@ -24,6 +85,8 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.scroll = "adaptive"
     page.window_width = 400
+
+    initialize_db()
 
     inventory_list = ft.Column(spacing=10)
 
@@ -50,13 +113,11 @@ def main(page: ft.Page):
 
             row = ft.Container(
                 content=ft.Row([
-                    # Πληροφορίες Είδους
                     ft.Column([
                         ft.Text(f"{color} - {size}", size=18, weight="bold"),
                         ft.Text(f"Αρχικά: {initial_qty} | Πουλήθηκαν: {sold_qty}", size=12, color=ft.Colors.GREY_700),
                     ], expand=True),
 
-                    # Κουμπιά & Διαθέσιμο απόθεμα
                     ft.IconButton(ft.Icons.REMOVE_CIRCLE_OUTLINE, on_click=minus_click, icon_color="red"),
                     ft.Column([
                         ft.Text(str(available), size=22, weight="bold", color=ft.Colors.BLUE_900),
